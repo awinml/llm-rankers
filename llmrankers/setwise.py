@@ -1,7 +1,6 @@
 from typing import List
 from .rankers import LlmRanker, SearchResult
 import openai
-from groq import Groq
 import time
 import re
 from transformers import T5Tokenizer, T5ForConditionalGeneration, AutoConfig, AutoModelForCausalLM, AutoTokenizer
