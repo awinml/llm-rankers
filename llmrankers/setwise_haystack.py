@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, List
 
 from haystack import ComponentError, Document, component
 from haystack.lazy_imports import LazyImport
