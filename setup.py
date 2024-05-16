@@ -20,6 +20,6 @@ setup(
         "openai==0.28",
         "tiktoken>=0.4.0",
         "accelerate>=0.22.0",
-        "haystack-ai"
+        # "haystack-ai" - remove temporarily because of openai version conflict
     ]
 )
