@@ -432,6 +432,7 @@ class OpenAISetwiseLlmRanker(SetwiseLlmRanker):
 
         while True:
             try:
+                time.sleep(2)
                 response = openai.ChatCompletion.create(
                     model=self.llm,
                     messages=[
