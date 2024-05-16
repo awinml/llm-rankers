@@ -17,8 +17,9 @@ setup(
     long_description_content_type="text/markdown",
     install_requires=[
         "transformers>=4.31.0",
-        "openai>=0.27.10",
+        "openai==0.28",
         "tiktoken>=0.4.0",
-        "accelerate>=0.22.0"
+        "accelerate>=0.22.0",
+        "haystack-ai"
     ]
 )
