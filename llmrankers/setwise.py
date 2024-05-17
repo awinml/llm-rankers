@@ -3,12 +3,13 @@ import random
 import re
 import time
 from collections import Counter, deque
-from typing import List
+from typing import List, Dict, Any
 
 import openai
 import tiktoken
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, T5ForConditionalGeneration, T5Tokenizer
+from llama_cpp import Llama
 
 from .rankers import LlmRanker, SearchResult
 
@@ -482,6 +483,74 @@ class OpenAISetwiseLlmRanker(SetwiseLlmRanker):
             except Exception as e:
                 print(f"Unknown error: {e}")
                 time.sleep(5)
+                raise e
+
+    def truncate(self, text, length):
+        return self.tokenizer.decode(self.tokenizer.encode(text)[:length])
+
+
+class LlamaCPPSetwiseLlmRanker(SetwiseLlmRanker):
+    def __init__(
+        self,
+        model_name_or_path: str,
+        model_kwargs: Dict[str, Any] = {"n_ctx": 1024},
+        generation_kwargs: Dict[str, Any] = {"max_tokens": 100, "temperature": 0.001},
+        num_child: int = 3,
+        method: str = "heapsort",
+        k: int = 10,
+    ):
+        self.model_name_or_path = model_name_or_path
+        self.tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        self.num_child = num_child
+        self.method = method
+        self.k = k
+        self.total_compare = 0
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.system_prompt = "You are RankGPT, an intelligent assistant specialized in selecting the most relevant passage from a pool of passages based on their relevance to the query."
+
+        self.model_kwargs = model_kwargs
+        self.generation_kwargs = generation_kwargs
+
+        self.llm = Llama(model_path=model_name_or_path, **model_kwargs)
+
+    def compare(self, query: str, docs: List):
+        self.total_compare += 1
+
+        passages = "\n\n".join([f'Passage {self.CHARACTERS[i]}: "{doc.text}"' for i, doc in enumerate(docs)])
+
+        input_text = (
+            f'Given a query "{query}", which of the following passages is the most relevant one to the query?\n\n'
+            + passages
+            + "\n\nOutput only the passage label of the most relevant passage."
+        )
+
+        while True:
+            try:
+                response = self.llm.create_chat_completion(
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": input_text},
+                    ],
+                    **self.generation_kwargs,
+                )
+
+                self.total_completion_tokens += int(response["usage"]["completion_tokens"])
+                self.total_prompt_tokens += int(response["usage"]["prompt_tokens"])
+
+                output = response["choices"][0]["message"]["content"]
+                matches = re.findall(r"(Passage [A-Z])", output, re.MULTILINE)
+                if matches:
+                    output = matches[0][8]
+                elif output.strip() in self.CHARACTERS:
+                    pass
+                else:
+                    print(f"Unexpected output: {output}")
+                    output = "A"
+                return output
+
+            except Exception as e:
+                print(f"Unknown error: {e}")
                 raise e
 
     def truncate(self, text, length):

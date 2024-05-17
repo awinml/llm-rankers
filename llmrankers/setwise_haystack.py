@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from haystack import ComponentError, Document, component
 from haystack.lazy_imports import LazyImport
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 with LazyImport(message="Run 'pip install git+https://github.com/awinml/llm-rankers.git'") as llm_ranker_import:
     from llmrankers.rankers import SearchResult
-    from llmrankers.setwise import OpenAISetwiseLlmRanker, SetwiseLlmRanker
+    from llmrankers.setwise import OpenAISetwiseLlmRanker, SetwiseLlmRanker, LlamaCPPSetwiseLlmRanker
 
 
 @component
@@ -36,6 +36,8 @@ class SetwiseLLMRanker:
         ranker_type: str = "hugging_face",
         rate_limit: int = 30,
         rate_limit_window: int = 60,
+        model_kwargs: Dict[str, Any] = {"n_ctx": 1024},
+        generation_kwargs: Dict[str, Any] = {"max_tokens": 100, "temperature": 0.001},
     ):
         """
         Initialize a SetwiseLLMRanker.
@@ -63,12 +65,20 @@ class SetwiseLLMRanker:
         :param cache_dir:
             Cache directory for the SetwiseLlmRanker.
         :param ranker_type:
-            Type of the SetwiseLlmRanker, should be one of "hugging_face" or "openai".
+            Type of the SetwiseLlmRanker, should be one of ["hugging_face", "openai", "llamacpp"].
+        :param rate_limit:
+            Rate limit for the SetwiseLlmRanker.
+        :param rate_limit_window:
+            Rate limit window for the SetwiseLlmRanker.
+        :param model_kwargs:
+            Additional keyword arguments to pass to the model.
+        :param generation_kwargs:
+            Additional keyword arguments to pass to the generation function.
         """
         llm_ranker_import.check()
 
         # Raise error if the ranker type is not supported
-        if ranker_type not in ["hugging_face", "openai"]:
+        if ranker_type not in ["hugging_face", "openai", "llamacpp"]:
             err_msg = f"Unsupported ranker type: {ranker_type}. Please use 'hugging_face' or 'openai'"
             raise ValueError(err_msg)
 
@@ -86,6 +96,8 @@ class SetwiseLLMRanker:
         self.device = device
         self.rate_limit = rate_limit
         self.rate_limit_window = rate_limit_window
+        self.model_kwargs = model_kwargs
+        self.generation_kwargs = generation_kwargs
 
     def warm_up(self):
         """
@@ -114,6 +126,17 @@ class SetwiseLLMRanker:
                 rate_limit=self.rate_limit,
                 rate_limit_window=self.rate_limit_window,
             )
+
+        elif self.ranker_type == "llamacpp":
+            self.ranker = LlamaCPPSetwiseLlmRanker(
+                model_name_or_path=self.model_name_or_path,
+                model_kwargs=self.model_kwargs,
+                generation_kwargs=self.generation_kwargs,
+                num_child=self.num_child,
+                method=self.method,
+                k=self.k,
+            )
+
         else:
             err_msg = f"Unsupported ranker type: {self.ranker_type}. Please use 'hugging_face' or 'openai'"
             raise ValueError(err_msg)
