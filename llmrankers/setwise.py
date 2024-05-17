@@ -1,14 +1,16 @@
-from typing import List
-from .rankers import LlmRanker, SearchResult
-import openai
-import time
-import re
-from transformers import T5Tokenizer, T5ForConditionalGeneration, AutoConfig, AutoModelForCausalLM, AutoTokenizer
-import torch
 import copy
-from collections import Counter
-import tiktoken
 import random
+import re
+import time
+from collections import Counter, deque
+from typing import List
+
+import openai
+import tiktoken
+import torch
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, T5ForConditionalGeneration, T5Tokenizer
+
+from .rankers import LlmRanker, SearchResult
 
 random.seed(929)
 
@@ -405,6 +407,8 @@ class OpenAISetwiseLlmRanker(SetwiseLlmRanker):
         num_child: int = 3,
         method: str = "heapsort",
         k: int = 10,
+        rate_limit: int = 30,
+        rate_limit_window: int = 60,
     ):
         self.llm = model_name_or_path
         self.tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
@@ -419,6 +423,12 @@ class OpenAISetwiseLlmRanker(SetwiseLlmRanker):
         if api_base_url != "":
             openai.api_base = api_base_url
 
+        self.api_call_times = deque(
+            maxlen=rate_limit_window
+        )  # Store the timestamps of API calls within the rate limit window
+        self.rate_limit = rate_limit  # Maximum allowed API calls in the rate limit window
+        self.rate_limit_window = rate_limit_window  # Rate limit window in seconds
+
     def compare(self, query: str, docs: List):
         self.total_compare += 1
 
@@ -432,7 +442,19 @@ class OpenAISetwiseLlmRanker(SetwiseLlmRanker):
 
         while True:
             try:
-                time.sleep(2)
+                # Check if the API call rate limit has been reached within the current window
+                current_time = time.time()
+                self.api_call_times.append(current_time)
+                if (
+                    len(self.api_call_times) == self.api_call_times.maxlen
+                    and len(self.api_call_times) > self.rate_limit
+                ):
+                    # Wait until the rate limit window is reset
+                    time_to_wait = self.rate_limit_window - (current_time - self.api_call_times[0])
+                    print(f"API call rate limit reached, waiting for {time_to_wait} seconds.")
+                    time.sleep(time_to_wait)
+                    self.api_call_times.clear()
+
                 response = openai.ChatCompletion.create(
                     model=self.llm,
                     messages=[

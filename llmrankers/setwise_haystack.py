@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List
+from typing import List, Optional
 
 from haystack import ComponentError, Document, component
 from haystack.lazy_imports import LazyImport
@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 
 
 with LazyImport(message="Run 'pip install git+https://github.com/awinml/llm-rankers.git'") as llm_ranker_import:
-    from llmrankers.setwise import OpenAISetwiseLlmRanker, SetwiseLlmRanker
     from llmrankers.rankers import SearchResult
+    from llmrankers.setwise import OpenAISetwiseLlmRanker, SetwiseLlmRanker
 
 
 @component
@@ -34,6 +34,8 @@ class SetwiseLLMRanker:
         num_permutation: int = 1,
         cache_dir: Optional[str] = None,
         ranker_type: str = "hugging_face",
+        rate_limit: int = 30,
+        rate_limit_window: int = 60,
     ):
         """
         Initialize a SetwiseLLMRanker.
@@ -82,6 +84,8 @@ class SetwiseLLMRanker:
         self.cache_dir = cache_dir
         self.ranker_type = ranker_type
         self.device = device
+        self.rate_limit = rate_limit
+        self.rate_limit_window = rate_limit_window
 
     def warm_up(self):
         """
@@ -107,6 +111,8 @@ class SetwiseLLMRanker:
                 num_child=self.num_child,
                 k=self.k,
                 method=self.method,
+                rate_limit=self.rate_limit,
+                rate_limit_window=self.rate_limit_window,
             )
         else:
             err_msg = f"Unsupported ranker type: {self.ranker_type}. Please use 'hugging_face' or 'openai'"
